@@ -74,7 +74,14 @@ mapdns:
         cfg.writeText(yaml)
 
         val fd = tun!!.fd
-        Thread { TProxyService.TProxyStartService(cfg.absolutePath, fd) }.start()
+        Thread {
+    try {
+        Log.e("ProxyApp", "starting tunnel $host:$port udp=$udp")
+        TProxyService.TProxyStartService(cfg.absolutePath, fd)
+    } catch (t: Throwable) {
+        Log.e("ProxyApp", "tunnel failed", t)
+    }
+}.start()
         running = true
     }
 
