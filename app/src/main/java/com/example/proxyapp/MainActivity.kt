@@ -2,6 +2,8 @@ package com.example.proxyapp
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.VpnService
 import android.os.Bundle
 import android.text.InputType
 import android.view.ViewGroup
@@ -23,6 +25,7 @@ class MainActivity : Activity() {
     private lateinit var userInput: EditText
     private lateinit var passInput: EditText
     private lateinit var udpSwitch: Switch
+    private lateinit var connectBtn: Button
     private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,6 +70,10 @@ class MainActivity : Activity() {
         saveBtn.setOnClickListener { save() }
         root.addView(saveBtn)
 
+        connectBtn = Button(this)
+        connectBtn.setOnClickListener { toggleConnect() }
+        root.addView(connectBtn)
+
         statusText = label("", 14f)
         root.addView(statusText)
 
@@ -81,6 +88,12 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         load()
+        updateButton()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateButton()
     }
 
     private fun label(text: String, size: Float) = TextView(this).apply {
@@ -96,6 +109,46 @@ class MainActivity : Activity() {
     }
 
     private fun prefs() = getSharedPreferences("proxy", Context.MODE_PRIVATE)
+
+    private fun updateButton() {
+        connectBtn.text = if (ProxyVpnService.running) "Disconnect" else "Connect"
+    }
+
+    private fun toggleConnect() {
+        if (ProxyVpnService.running) {
+            startService(
+                Intent(this, ProxyVpnService::class.java)
+                    .setAction(ProxyVpnService.ACTION_STOP)
+            )
+            connectBtn.text = "Connect"
+            statusText.text = "Disconnected"
+            return
+        }
+
+        if (prefs().getString("host", "").isNullOrEmpty()) {
+            Toast.makeText(this, "Save the proxy first", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val intent = VpnService.prepare(this)
+        if (intent != null) {
+            startActivityForResult(intent, REQ_VPN)
+        } else {
+            startVpn()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_VPN && resultCode == RESULT_OK) startVpn()
+    }
+
+    private fun startVpn() {
+        startForegroundService(Intent(this, ProxyVpnService::class.java))
+        connectBtn.text = "Disconnect"
+        statusText.text = "Connected (tunnel not linked yet)"
+    }
 
     private fun save() {
         val host = hostInput.text.toString().trim()
@@ -131,5 +184,9 @@ class MainActivity : Activity() {
         typeSpinner.setSelection(if (p.getString("type", "SOCKS5") == "HTTP") 1 else 0)
         udpSwitch.isChecked = p.getBoolean("udp", false)
         statusText.text = "Loaded saved proxy"
+    }
+
+    companion object {
+        private const val REQ_VPN = 1
     }
 }
