@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var udpSwitch: Switch
     private lateinit var connectBtn: Button
     private lateinit var statusText: TextView
+    private lateinit var logText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,8 +75,18 @@ class MainActivity : Activity() {
         connectBtn.setOnClickListener { toggleConnect() }
         root.addView(connectBtn)
 
+        val logBtn = Button(this).apply { text = "Show error log" }
+        logBtn.setOnClickListener { showLog() }
+        root.addView(logBtn)
+
         statusText = label("", 14f)
         root.addView(statusText)
+
+        logText = TextView(this).apply {
+            textSize = 11f
+            setTextIsSelectable(true)
+        }
+        root.addView(logText)
 
         val scroll = ScrollView(this)
         scroll.addView(
@@ -109,6 +120,22 @@ class MainActivity : Activity() {
     }
 
     private fun prefs() = getSharedPreferences("proxy", Context.MODE_PRIVATE)
+
+    private fun showLog() {
+        logText.text = "Reading log..."
+        Thread {
+            val out = try {
+                val proc = Runtime.getRuntime()
+                    .exec(arrayOf("logcat", "-d", "-t", "300", "*:E"))
+                proc.inputStream.bufferedReader().readText()
+                    .takeLast(6000)
+                    .ifBlank { "(log is empty)" }
+            } catch (t: Throwable) {
+                "Could not read log: $t"
+            }
+            runOnUiThread { logText.text = out }
+        }.start()
+    }
 
     private fun updateButton() {
         connectBtn.text = if (ProxyVpnService.running) "Disconnect" else "Connect"
