@@ -147,7 +147,7 @@ class MainActivity : Activity() {
     private fun startVpn() {
         startForegroundService(Intent(this, ProxyVpnService::class.java))
         connectBtn.text = "Disconnect"
-        statusText.text = "Connected (tunnel not linked yet)"
+        statusText.text = "Connected"
     }
 
     private fun save() {
