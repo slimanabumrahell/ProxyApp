@@ -7,12 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import hev.htproxy.TProxyService
 import java.io.File
 
 class ProxyVpnService : VpnService() {
 
     private var tun: ParcelFileDescriptor? = null
-    private var worker: Thread? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -39,13 +39,15 @@ class ProxyVpnService : VpnService() {
             .setMtu(1500)
             .addAddress("10.10.10.1", 32)
             .addRoute("0.0.0.0", 0)
+            // IPv6 بيدخل النفق وبينحجب (المكتبة ما بتعالجه) فما بيتسرب
+            .addAddress("fd00::1", 128)
+            .addRoute("::", 0)
             .addDnsServer("10.10.10.2")
 
-        // يمنع الخدمة نفسها من المرور بالنفق (تجنّب الحلقة)
+        // الخدمة نفسها تتصل بالبروكسي خارج النفق (تجنّب الحلقة)
         try { builder.addDisallowedApplication(packageName) } catch (_: Exception) {}
 
         tun = builder.establish() ?: return
-        running = true
 
         val auth = if (user.isNotEmpty())
             "  username: '$user'\n  password: '$pass'\n" else ""
@@ -63,8 +65,8 @@ $auth
 mapdns:
   address: 10.10.10.2
   port: 53
-  network: 100.64.0.0
-  netmask: 255.192.0.0
+  network: 240.0.0.0
+  netmask: 240.0.0.0
   cache-size: 10000
 """.trimIndent()
 
@@ -72,13 +74,12 @@ mapdns:
         cfg.writeText(yaml)
 
         val fd = tun!!.fd
-        worker = Thread { TunnelBridge.start(cfg.absolutePath, fd) }.also { it.start() }
+        Thread { TProxyService.TProxyStartService(cfg.absolutePath, fd) }.start()
+        running = true
     }
 
     private fun stopVpn() {
-        try { TunnelBridge.stop() } catch (_: Throwable) {}
-        worker?.join(2000)
-        worker = null
+        try { TProxyService.TProxyStopService() } catch (_: Throwable) {}
         tun?.close()
         tun = null
         running = false
