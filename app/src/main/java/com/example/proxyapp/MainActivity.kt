@@ -11,6 +11,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -21,6 +22,7 @@ class MainActivity : Activity() {
     private lateinit var portInput: EditText
     private lateinit var userInput: EditText
     private lateinit var passInput: EditText
+    private lateinit var udpSwitch: Switch
     private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,6 +56,12 @@ class MainActivity : Activity() {
         root.addView(portInput)
         root.addView(userInput)
         root.addView(passInput)
+
+        udpSwitch = Switch(this).apply {
+            text = "Enable UDP"
+            setPadding(0, 24, 0, 24)
+        }
+        root.addView(udpSwitch)
 
         val saveBtn = Button(this).apply { text = "Save" }
         saveBtn.setOnClickListener { save() }
@@ -104,9 +112,11 @@ class MainActivity : Activity() {
             .putInt("port", port)
             .putString("user", userInput.text.toString())
             .putString("pass", passInput.text.toString())
+            .putBoolean("udp", udpSwitch.isChecked)
             .apply()
 
-        statusText.text = "Saved: ${typeSpinner.selectedItem} $host:$port"
+        val udpState = if (udpSwitch.isChecked) "UDP on" else "UDP off"
+        statusText.text = "Saved: ${typeSpinner.selectedItem} $host:$port ($udpState)"
     }
 
     private fun load() {
@@ -119,6 +129,7 @@ class MainActivity : Activity() {
         userInput.setText(p.getString("user", ""))
         passInput.setText(p.getString("pass", ""))
         typeSpinner.setSelection(if (p.getString("type", "SOCKS5") == "HTTP") 1 else 0)
+        udpSwitch.isChecked = p.getBoolean("udp", false)
         statusText.text = "Loaded saved proxy"
     }
 }
