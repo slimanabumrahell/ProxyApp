@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import hev.htproxy.TProxyService
 import java.io.File
 
@@ -39,49 +40,52 @@ class ProxyVpnService : VpnService() {
             .setMtu(1500)
             .addAddress("10.10.10.1", 32)
             .addRoute("0.0.0.0", 0)
-            // IPv6 بيدخل النفق وبينحجب (المكتبة ما بتعالجه) فما بيتسرب
             .addAddress("fd00::1", 128)
             .addRoute("::", 0)
             .addDnsServer("10.10.10.2")
 
-        // الخدمة نفسها تتصل بالبروكسي خارج النفق (تجنّب الحلقة)
         try { builder.addDisallowedApplication(packageName) } catch (_: Exception) {}
 
         tun = builder.establish() ?: return
 
-        val auth = if (user.isNotEmpty())
-            "  username: '$user'\n  password: '$pass'\n" else ""
         val udpMode = if (udp) "udp" else "tcp"
-
-        val yaml = """
-tunnel:
-  mtu: 1500
-  ipv4: 10.10.10.1
-socks5:
-  port: $port
-  address: '$host'
-  udp: '$udpMode'
-$auth
-mapdns:
-  address: 10.10.10.2
-  port: 53
-  network: 240.0.0.0
-  netmask: 240.0.0.0
-  cache-size: 10000
-""".trimIndent()
+        val lines = mutableListOf(
+            "tunnel:",
+            "  mtu: 1500",
+            "  ipv4: 10.10.10.1",
+            "socks5:",
+            "  port: $port",
+            "  address: '$host'",
+            "  udp: '$udpMode'"
+        )
+        if (user.isNotEmpty()) {
+            lines.add("  username: '$user'")
+            lines.add("  password: '$pass'")
+        }
+        lines.addAll(
+            listOf(
+                "mapdns:",
+                "  address: 10.10.10.2",
+                "  port: 53",
+                "  network: 240.0.0.0",
+                "  netmask: 240.0.0.0",
+                "  cache-size: 10000"
+            )
+        )
+        val yaml = lines.joinToString("\n") + "\n"
 
         val cfg = File(cacheDir, "tunnel.yml")
         cfg.writeText(yaml)
 
         val fd = tun!!.fd
         Thread {
-    try {
-        Log.e("ProxyApp", "starting tunnel $host:$port udp=$udp")
-        TProxyService.TProxyStartService(cfg.absolutePath, fd)
-    } catch (t: Throwable) {
-        Log.e("ProxyApp", "tunnel failed", t)
-    }
-}.start()
+            try {
+                Log.e("ProxyApp", "starting tunnel $host:$port udp=$udp")
+                TProxyService.TProxyStartService(cfg.absolutePath, fd)
+            } catch (t: Throwable) {
+                Log.e("ProxyApp", "tunnel failed", t)
+            }
+        }.start()
         running = true
     }
 
