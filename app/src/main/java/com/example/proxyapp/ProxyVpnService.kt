@@ -7,10 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import java.io.File
 
 class ProxyVpnService : VpnService() {
 
     private var tun: ParcelFileDescriptor? = null
+    private var worker: Thread? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -25,20 +27,58 @@ class ProxyVpnService : VpnService() {
     private fun startVpn() {
         if (tun != null) return
 
+        val p = getSharedPreferences("proxy", Context.MODE_PRIVATE)
+        val host = p.getString("host", "") ?: ""
+        val port = p.getInt("port", 0)
+        val user = p.getString("user", "") ?: ""
+        val pass = p.getString("pass", "") ?: ""
+        val udp = p.getBoolean("udp", false)
+
         val builder = Builder()
             .setSession("ProxyApp")
             .setMtu(1500)
             .addAddress("10.10.10.1", 32)
             .addRoute("0.0.0.0", 0)
             .addDnsServer("10.10.10.2")
-            .addAddress("fd00::1", 128)
-            .addRoute("::", 0)
 
-        tun = builder.establish()
-        running = tun != null
+        // يمنع الخدمة نفسها من المرور بالنفق (تجنّب الحلقة)
+        try { builder.addDisallowedApplication(packageName) } catch (_: Exception) {}
+
+        tun = builder.establish() ?: return
+        running = true
+
+        val auth = if (user.isNotEmpty())
+            "  username: '$user'\n  password: '$pass'\n" else ""
+        val udpMode = if (udp) "udp" else "tcp"
+
+        val yaml = """
+tunnel:
+  mtu: 1500
+  ipv4: 10.10.10.1
+socks5:
+  port: $port
+  address: '$host'
+  udp: '$udpMode'
+$auth
+mapdns:
+  address: 10.10.10.2
+  port: 53
+  network: 100.64.0.0
+  netmask: 255.192.0.0
+  cache-size: 10000
+""".trimIndent()
+
+        val cfg = File(cacheDir, "tunnel.yml")
+        cfg.writeText(yaml)
+
+        val fd = tun!!.fd
+        worker = Thread { TunnelBridge.start(cfg.absolutePath, fd) }.also { it.start() }
     }
 
     private fun stopVpn() {
+        try { TunnelBridge.stop() } catch (_: Throwable) {}
+        worker?.join(2000)
+        worker = null
         tun?.close()
         tun = null
         running = false
