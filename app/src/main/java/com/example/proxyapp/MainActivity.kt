@@ -121,15 +121,15 @@ class MainActivity : Activity() {
 
     private fun prefs() = getSharedPreferences("proxy", Context.MODE_PRIVATE)
 
-    private fun showLog() {
+        private fun showLog() {
         logText.text = "Reading log..."
         Thread {
             val out = try {
                 val proc = Runtime.getRuntime()
-                    .exec(arrayOf("logcat", "-d", "-t", "300", "*:E"))
+                    .exec(arrayOf("logcat", "-b", "crash", "-d", "-t", "60"))
                 proc.inputStream.bufferedReader().readText()
-                    .takeLast(6000)
-                    .ifBlank { "(log is empty)" }
+                    .take(3500)
+                    .ifBlank { "(crash log is empty)" }
             } catch (t: Throwable) {
                 "Could not read log: $t"
             }
