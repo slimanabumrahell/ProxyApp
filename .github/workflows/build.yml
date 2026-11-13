@@ -35,13 +35,11 @@ jobs:
         run: |
           set -o pipefail
           gradle assembleDebug --console=plain 2>&1 | tail -n 80
-
       - uses: actions/upload-artifact@v4
         with:
           name: ProxyApp-debug
           path: app/build/outputs/apk/debug/*.apk
-
-      - name: Fetch hev-socks5-tunnel
+        - name: Fetch hev-socks5-tunnel
         run: |
           git clone --recursive --depth 1 https://github.com/heiher/hev-socks5-tunnel.git app/src/main/jni/hev-socks5-tunnel
           grep -rn "native" app/src/main/jni/hev-socks5-tunnel/src/*.c | grep -i "JNIEXPORT\|Java_" || true
